@@ -1,6 +1,7 @@
 import string
 from itertools import permutations
 import random
+import sys
 
 # Counter class to keep track of fitness evaluations
 class Counter:
@@ -429,7 +430,22 @@ def convert_freq_file(lines):
         ans[temp[-1].lower()] = float(temp[0])
     return ans
 
-def main():
+def main(args):
+    if args is None or len(args) == 0:
+        print("Error: Missing Arguments.")
+        return
+
+    # 0 - regular, 1 - Darwin , 2 - Lamarck 
+    mode = 0
+    if args[0] == "1":
+        mode = 1
+    elif args[0] == "2":
+        mode = 2
+
+    pop_size = 20000
+    if len(args) > 1:
+        pop_size = int(args[1])
+
     ## extrect data from files
     english = set(line.strip() for line in open('dict.txt'))
     english.remove("")
@@ -455,7 +471,7 @@ def main():
     freq2 = convert_freq_file(lf2)
 
     ## generate population
-    pop = gen_population(sol_type=0, enc=enc_set, english=english, enc_freq1=freq_single, enc_freq2=freq_pair, eng_freq1=freq1, eng_freq2=freq2, population_size=20000)
+    pop = gen_population(sol_type=mode, enc=enc_set, english=english, enc_freq1=freq_single, enc_freq2=freq_pair, eng_freq1=freq1, eng_freq2=freq2, population_size=pop_size)
 
     ## get best solution from genetic algorithm
     ans = genetic(solutions=pop)
@@ -468,4 +484,4 @@ def main():
         file.write(ans.convert(enc))
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])
