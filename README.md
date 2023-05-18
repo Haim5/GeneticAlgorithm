@@ -9,4 +9,4 @@
 if not given, 20,000 is used as a default
 
 ### example:
-python3 geneticAlgorithm.py 0 11
+> python3 geneticAlgorithm.py 0 11
