@@ -2,13 +2,33 @@ import string
 from itertools import permutations
 import random
 
+class Counter:
+    def __init__(self):
+        self.__value = 0
+
+    def inc(self):
+        self.__value += 1
+
+    def get(self):
+        return self.__value
+
 class Solution:
-    def __init__(self, table : dict(), enc : dict(), enc_freq1 : dict(), enc_freq2 : dict(), eng : dict(), eng_freq1 : dict(), eng_freq2 : dict(), w1=1, w2=1, w3=1):
+    def __init__(self, table : dict(), enc : dict(), enc_freq1 : dict(), enc_freq2 : dict(), eng : dict(), eng_freq1 : dict(), eng_freq2 : dict()):
         self.__table = table
-        self.__fit = w1 * self.__eval_word(enc=enc, english=eng) + w2 * self.__eval_freq(enc_freq=enc_freq1, eng_freq=eng_freq1, epsilon=0.05) + w3 * self.__eval_freq(enc_freq=enc_freq2, eng_freq=eng_freq2, epsilon=0.005)
+        self.enc = enc
+        self.eng = eng
+        self.eng_freq1 = eng_freq1 
+        self.eng_freq2 = eng_freq2
+        self.enc_freq1 = enc_freq1
+        self.enc_freq2 = enc_freq2
+        self.__fit = float('-inf')
 
         ##w1 * self.__eval_word(enc=enc, english=eng)
-    def get_fit(self):
+    def get_fit(self, counter):
+        did_not_calc = bool(self.__fit == float('-inf'))
+        if did_not_calc:
+            counter.inc()
+            self.__fit = self.__eval_word(enc=self.enc, english=self.eng) + self.__eval_freq(enc_freq=self.enc_freq1, eng_freq=self.eng_freq1, epsilon=0.05) + self.__eval_freq(enc_freq=self.enc_freq2, eng_freq=self.eng_freq2, epsilon=0.005)
         return self.__fit
     
     def convert(self, word : str):
@@ -48,6 +68,16 @@ class Solution:
         if count > 0:
             return inside / count
         return 0
+    
+    def get_perm(self):
+        perm = "{"
+        for let in string.ascii_lowercase:
+            perm += let + " : " + self.__table[let]
+            if let == 'z':
+                perm += "}"
+            else:
+                perm += ", "
+        return perm
     
     def mutation(self):
         c1, c2 = random.sample(string.ascii_lowercase, 2)
@@ -120,12 +150,13 @@ def to_dict(text : str):
     return ans
 
 
-def select_next(options : list):
+def select_next(options : list, counter):
     best = None
     score = float('-inf')
     for s in options:
-        if s.get_fit() > score:
-            score = s.get_fit()
+        temp = s.get_fit(counter)
+        if temp > score:
+            score = temp
             best = s
     return best
 
@@ -166,8 +197,10 @@ def crossover(solutions, enc, enc_freq1, enc_freq2, eng, eng_freq1, eng_freq2):
             for let in letters2:
                 table1[let] = sol2.convert(let)
             off1 = Solution(table=table1, enc=enc, eng=eng, enc_freq1=enc_freq1, enc_freq2=enc_freq2, eng_freq1=eng_freq1, eng_freq2=eng_freq2)
+          
             next_gen.append(off1)
             if random.random() <= mu_odds:
+                
                 next_gen.append(Solution(table=off1.mutation(), enc=enc, eng=eng, enc_freq1=enc_freq1, enc_freq2=enc_freq2, eng_freq1=eng_freq1, eng_freq2=eng_freq2))
             if (random_division != len(alphabet) / 2):
                 table2 = dict()
@@ -176,8 +209,10 @@ def crossover(solutions, enc, enc_freq1, enc_freq2, eng, eng_freq1, eng_freq2):
                 for let in letters2:
                     table2[let] = sol1.convert(let)
                 off2 = Solution(table=table2, enc=enc, eng=eng, enc_freq1=enc_freq1, enc_freq2=enc_freq2, eng_freq1=eng_freq1, eng_freq2=eng_freq2)
+                
                 next_gen.append(off2)
                 if random.random() <= mu_odds:
+                    
                     next_gen.append(Solution(table=off2.mutation(), enc=enc, eng=eng, enc_freq1=enc_freq1, enc_freq2=enc_freq2, eng_freq1=eng_freq1, eng_freq2=eng_freq2))
 
         if random.random() <= stay_odds:
@@ -185,21 +220,12 @@ def crossover(solutions, enc, enc_freq1, enc_freq2, eng, eng_freq1, eng_freq2):
         if random.random() <= stay_odds:
             next_gen.append(sol2)
 
-    return next_gen 
+    return next_gen
 
 
-def print_best_score(solutions):
-    best = float('-inf')
-    for s in solutions:
-        if s.get_fit() > best:
-            best = s.get_fit()
-    print(best)
-
-def genetic(enc, enc_freq1, enc_freq2, english, eng_freq1, eng_freq2):
+def genetic(enc, enc_freq1, enc_freq2, english, eng_freq1, eng_freq2, num_permutations=2000, max_gen=800, max_con=15):
     alphabet = string.ascii_lowercase
-    num_permutations = 20000
-    max_gen = 800
-    max_con = 50
+    c = Counter()
     gen = 0
     con = 0
     best_score = float('-inf')
@@ -225,27 +251,31 @@ def genetic(enc, enc_freq1, enc_freq2, english, eng_freq1, eng_freq2):
         end = int(0.15 * len(solutions))
         elite = solutions[:end]
         solutions = solutions[end:]
-        solutions = [select_next(sub_solution) for sub_solution in [solutions[i:i+slice_size] for i in range(0, len(solutions), slice_size)]]
+        solutions = [select_next(sub_solution, c) for sub_solution in [solutions[i:i+slice_size] for i in range(0, len(solutions), slice_size)]]
         if len(solutions) % 2 != 0 and len(solutions) > 1:
             random.shuffle(solutions)
             s1 = solutions.pop()
             s2 = solutions.pop()
-            solutions.append(select_next([s1, s2]))
+            solutions.append(select_next([s1, s2], c))
         
         pairs = pair_solutions(solutions)
         
         next_gen = crossover(solutions=pairs, enc=enc, eng=english, enc_freq1=enc_freq1, enc_freq2=enc_freq2, eng_freq1=eng_freq1, eng_freq2=eng_freq2)
         solutions = next_gen + elite
-        gen += 1
         
-        next_sol = select_next(solutions)
-        if next_sol is not None and next_sol.get_fit() > best_score:
-            best_score = next_sol.get_fit()
+        next_sol = select_next(solutions, c)
+        
+        if next_sol is not None and next_sol.get_fit(c) > best_score:
+            best_score = next_sol.get_fit(c)
             best_sol = next_sol
             con = 0
         else:
             con += 1
-        print(best_score)
+        gen += 1
+
+    print("Best fit score: " + str(best_score))
+    print("Generation: " + str(gen))
+    print("Fitness counter: " + str(c.get()))
     return best_sol
 
 def convert_to_set(text):
@@ -261,7 +291,7 @@ def convert_to_set(text):
 def convert_freq_file(lines):
     ans = dict()
     for line in lines:
-        if line == '\t' or line == '':
+        if line == '' or line.isspace():
             break
         temp = line.split("\t")
         ans[temp[-1].lower()] = float(temp[0])
@@ -293,9 +323,12 @@ def main():
 
 
     ans = genetic(enc=enc_set, english=english, enc_freq1=freq_single, enc_freq2=freq_pair, eng_freq1=freq1, eng_freq2=freq2)
-    print("final = " + str(ans.get_fit()))
 
-    print(ans.convert(enc))
+    with open("perm.txt", 'w') as file:
+        file.write(ans.get_perm())
+    
+    with open("plain.txt", 'w') as file:
+        file.write(ans.convert(enc))
 
 if __name__ == "__main__":
     main()
