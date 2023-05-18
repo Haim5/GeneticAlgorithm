@@ -5,9 +5,9 @@ import random
 class Solution:
     def __init__(self, table : dict(), enc : dict(), enc_freq1 : dict(), enc_freq2 : dict(), eng : dict(), eng_freq1 : dict(), eng_freq2 : dict(), w1=1, w2=1, w3=1):
         self.__table = table
-        self.__fit = w1 * self.__eval_word(enc=enc, english=eng) + w2 * self.__eval_freq(enc_freq=enc_freq1, eng_freq=eng_freq1) + w3 * self.__eval_freq(enc_freq=enc_freq2, eng_freq=eng_freq2)
+        self.__fit = w1 * self.__eval_word(enc=enc, english=eng) + w2 * self.__eval_freq(enc_freq=enc_freq1, eng_freq=eng_freq1, epsilon=0.05) + w3 * self.__eval_freq(enc_freq=enc_freq2, eng_freq=eng_freq2, epsilon=0.005)
 
-
+        ##w1 * self.__eval_word(enc=enc, english=eng)
     def get_fit(self):
         return self.__fit
     
@@ -48,7 +48,16 @@ class Solution:
         if count > 0:
             return inside / count
         return 0
-        
+    
+    def mutation(self):
+        c1, c2 = random.sample(string.ascii_lowercase, 2)
+        val1 = self.__table[c1]
+        val2 = self.__table[c2]
+        t = self.__table.copy()
+        t[c1] = val2
+        t[c2] = val1
+        return t
+            
 ## chack if it is a character we need to ignore
 def can_ignore(c):
     return bool(c == "." or c == "," or c == ";" or c == "\n" or c == " ")
@@ -137,27 +146,44 @@ def pair_solutions(solutions):
 ## random crossover
 def crossover(solutions, enc, enc_freq1, enc_freq2, eng, eng_freq1, eng_freq2):
     alphabet = list(string.ascii_lowercase)
+    stay_odds = 0.35
+    mu_odds = 0.01
     next_gen = []
     for p in solutions:
-        random.shuffle(alphabet)
-        random_division = random.randint(1, 25)
-        letters1 = alphabet[:random_division]
-        letters2 = alphabet[random_division:]
+        children = random.randint(1, 2)
         sol1 = p[0]
         sol2 = p[1]
-        table1 = dict()
-        for let in letters1:
-            table1[let] = sol1.convert(let)
-        for let in letters2:
-            table1[let] = sol2.convert(let)
-        next_gen.append(Solution(table=table1, enc=enc, eng=eng, enc_freq1=enc_freq1, enc_freq2=enc_freq2, eng_freq1=eng_freq1, eng_freq2=eng_freq2))
-        if (random_division != len(alphabet) / 2):
-            table2 = dict()
+        for i in range(0, children):
+
+            random.shuffle(alphabet)
+            random_division = random.randint(1, 25)
+            letters1 = alphabet[:random_division]
+            letters2 = alphabet[random_division:]
+
+            table1 = dict()
             for let in letters1:
-                table2[let] = sol2.convert(let)
+                table1[let] = sol1.convert(let)
             for let in letters2:
-                table2[let] = sol1.convert(let)
-            next_gen.append(Solution(table=table2, enc=enc, eng=eng, enc_freq1=enc_freq1, enc_freq2=enc_freq2, eng_freq1=eng_freq1, eng_freq2=eng_freq2))
+                table1[let] = sol2.convert(let)
+            off1 = Solution(table=table1, enc=enc, eng=eng, enc_freq1=enc_freq1, enc_freq2=enc_freq2, eng_freq1=eng_freq1, eng_freq2=eng_freq2)
+            next_gen.append(off1)
+            if random.random() <= mu_odds:
+                next_gen.append(Solution(table=off1.mutation(), enc=enc, eng=eng, enc_freq1=enc_freq1, enc_freq2=enc_freq2, eng_freq1=eng_freq1, eng_freq2=eng_freq2))
+            if (random_division != len(alphabet) / 2):
+                table2 = dict()
+                for let in letters1:
+                    table2[let] = sol2.convert(let)
+                for let in letters2:
+                    table2[let] = sol1.convert(let)
+                off2 = Solution(table=table2, enc=enc, eng=eng, enc_freq1=enc_freq1, enc_freq2=enc_freq2, eng_freq1=eng_freq1, eng_freq2=eng_freq2)
+                next_gen.append(off2)
+                if random.random() <= mu_odds:
+                    next_gen.append(Solution(table=off2.mutation(), enc=enc, eng=eng, enc_freq1=enc_freq1, enc_freq2=enc_freq2, eng_freq1=eng_freq1, eng_freq2=eng_freq2))
+
+        if random.random() <= stay_odds:
+            next_gen.append(sol1)
+        if random.random() <= stay_odds:
+            next_gen.append(sol2)
 
     return next_gen 
 
@@ -171,7 +197,13 @@ def print_best_score(solutions):
 
 def genetic(enc, enc_freq1, enc_freq2, english, eng_freq1, eng_freq2):
     alphabet = string.ascii_lowercase
-    num_permutations = 200
+    num_permutations = 20000
+    max_gen = 800
+    max_con = 50
+    gen = 0
+    con = 0
+    best_score = float('-inf')
+    best_sol = None
 
     limited_permutations = set() 
 
@@ -181,23 +213,40 @@ def genetic(enc, enc_freq1, enc_freq2, english, eng_freq1, eng_freq2):
         limited_permutations.add(''.join(permutation))
 
     solutions = [Solution(table=to_dict(x), enc=enc, eng=english, enc_freq1=enc_freq1, enc_freq2=enc_freq2, eng_freq1=eng_freq1, eng_freq2=eng_freq2) for x in limited_permutations]
-    slice_size = 2
-    counter = 0
-    while counter < 500 and len(solutions) > slice_size:
-        print_best_score(solutions)
+    slice_size = 0
+
+    while gen < max_gen and con < max_con and len(solutions) > slice_size:
+        if len(solutions) > 10000:
+            slice_size = 3
+        else:
+            slice_size = 2
+
         random.shuffle(solutions)
+        end = int(0.15 * len(solutions))
+        elite = solutions[:end]
+        solutions = solutions[end:]
         solutions = [select_next(sub_solution) for sub_solution in [solutions[i:i+slice_size] for i in range(0, len(solutions), slice_size)]]
         if len(solutions) % 2 != 0 and len(solutions) > 1:
             random.shuffle(solutions)
             s1 = solutions.pop()
             s2 = solutions.pop()
             solutions.append(select_next([s1, s2]))
-
+        
         pairs = pair_solutions(solutions)
+        
         next_gen = crossover(solutions=pairs, enc=enc, eng=english, enc_freq1=enc_freq1, enc_freq2=enc_freq2, eng_freq1=eng_freq1, eng_freq2=eng_freq2)
-        solutions = next_gen
-        counter += 1
-    return select_next(solutions)
+        solutions = next_gen + elite
+        gen += 1
+        
+        next_sol = select_next(solutions)
+        if next_sol is not None and next_sol.get_fit() > best_score:
+            best_score = next_sol.get_fit()
+            best_sol = next_sol
+            con = 0
+        else:
+            con += 1
+        print(best_score)
+    return best_sol
 
 def convert_to_set(text):
     ans = set()
@@ -245,6 +294,8 @@ def main():
 
     ans = genetic(enc=enc_set, english=english, enc_freq1=freq_single, enc_freq2=freq_pair, eng_freq1=freq1, eng_freq2=freq2)
     print("final = " + str(ans.get_fit()))
+
+    print(ans.convert(enc))
 
 if __name__ == "__main__":
     main()
