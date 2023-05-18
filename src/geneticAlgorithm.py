@@ -2,6 +2,7 @@ import string
 from itertools import permutations
 import random
 
+# Counter class to keep track of fitness evaluations
 class Counter:
     def __init__(self):
         self.__value = 0
@@ -12,32 +13,35 @@ class Counter:
     def get(self):
         return self.__value
 
+
+# Solution class represents a potential mapping solution
 class Solution:
     def __init__(self, table : dict(), enc : dict(), enc_freq1 : dict(), enc_freq2 : dict(), eng : dict(), eng_freq1 : dict(), eng_freq2 : dict()):
-        self.__table = table
+        self._fit = float('-inf')
+        self._table = table
         self.enc = enc
         self.eng = eng
         self.eng_freq1 = eng_freq1 
         self.eng_freq2 = eng_freq2
         self.enc_freq1 = enc_freq1
         self.enc_freq2 = enc_freq2
-        self.__fit = float('-inf')
-
-        ##w1 * self.__eval_word(enc=enc, english=eng)
+        
+    # Calculate and return the fitness score
     def get_fit(self, counter):
-        did_not_calc = bool(self.__fit == float('-inf'))
+        did_not_calc = bool(self._fit == float('-inf'))
         if did_not_calc:
             counter.inc()
-            self.__fit = self.__eval_word(enc=self.enc, english=self.eng) + self.__eval_freq(enc_freq=self.enc_freq1, eng_freq=self.eng_freq1, epsilon=0.05) + self.__eval_freq(enc_freq=self.enc_freq2, eng_freq=self.eng_freq2, epsilon=0.005)
-        return self.__fit
+            self._fit = self.__eval_word(enc=self.enc, english=self.eng) + self.__eval_freq(enc_freq=self.enc_freq1, eng_freq=self.eng_freq1, epsilon=0.05) + self.__eval_freq(enc_freq=self.enc_freq2, eng_freq=self.eng_freq2, epsilon=0.005)
+        return self._fit
     
+    # Convert a word using the current mapping
     def convert(self, word : str):
         ans = ""
         for letter in word:
             if can_ignore(letter):
                 ans += letter
             else:
-                ans += self.__table[letter]
+                ans += self._table[letter]
         return ans
 
     ## giva a score for word match
@@ -54,7 +58,7 @@ class Solution:
     
         return found / overall
 
-    ## giva a score for the frequency match
+    ## give a score for the frequency match
     def __eval_freq(self, enc_freq, eng_freq, epsilon=0):
         count = 0
         inside = 0
@@ -69,24 +73,128 @@ class Solution:
             return inside / count
         return 0
     
+    # Get the current mapping as a string
     def get_perm(self):
         perm = "{"
         for let in string.ascii_lowercase:
-            perm += let + " : " + self.__table[let]
+            perm += let + " : " + self._table[let]
             if let == 'z':
                 perm += "}"
             else:
                 perm += ", "
         return perm
     
+    # Perform a mutation on the current mapping
     def mutation(self):
         c1, c2 = random.sample(string.ascii_lowercase, 2)
-        val1 = self.__table[c1]
-        val2 = self.__table[c2]
-        t = self.__table.copy()
+        val1 = self._table[c1]
+        val2 = self._table[c2]
+        t = self._table.copy()
         t[c1] = val2
         t[c2] = val1
         return t
+    
+    # Get the current mapping table
+    def get_table(self):
+        return self._table
+    
+    # Create an offspring with a new mapping table
+    def offspring(self, table):
+        return Solution(enc=self.enc, enc_freq1=self.enc_freq1, enc_freq2=self.enc_freq2, eng_freq1=self.eng_freq1, eng_freq2=self.eng_freq2, eng=self.eng, table=table)
+    
+# DarwinSolution class represents a solution using traditional Darwinian evolution
+class DarwinSolution(Solution):
+    ## constructor
+    def __init__(self, table : dict(), enc : dict(), enc_freq1 : dict(), enc_freq2 : dict(), eng : dict(), eng_freq1 : dict(), eng_freq2 : dict(), n=2):
+        super().__init__(table, enc, enc_freq1, enc_freq2, eng, eng_freq1, eng_freq2)
+        self.__n = n
+        self.__improved_table = None
+        self.__improved_fit = float('-inf')
+        self.__did_improve = False
+
+    ## try to make an improvement
+    def __improve(self, counter, n):
+        self.__did_improve = True
+        alphabet = string.ascii_lowercase
+        n = min(n, int(len(alphabet) / 2))
+        letters = random.sample(alphabet, n + n)
+        opt_table = self._table.copy()
+        for i in range(0, n):
+            index = i + i
+            k1 = letters[index]
+            k2 = letters[index + 1]
+            val1 = opt_table[k1]
+            val2 = opt_table[k2]
+            opt_table[k1] = val2
+            opt_table[k2] = val1
+            s = Solution(enc=self.enc, enc_freq1=self.enc_freq1, enc_freq2=self.enc_freq2, eng_freq1=self.eng_freq1, eng_freq2=self.eng_freq2, eng=self.eng, table=opt_table)
+            ## check which is better
+            score = s.get_fit(counter)
+            if score > self.get_fit(counter):
+                self.__improved_table = opt_table
+                self.__improved_fit = score
+        
+
+    def get_fit(self, counter):
+        if not self.__did_improve:
+            self.__improve(counter=counter, n=self.__n)
+        if self.__improved_fit == float('-inf'):
+            return super().get_fit(counter)
+        return self.__improved_fit
+    
+    ## convert cipher
+    def convert(self, word: str):
+        if self.__improved_table is None:
+            return super().convert(word)
+        ans = ""
+        for letter in word:
+            if can_ignore(letter):
+                ans += letter
+            else:
+                ans += self.__improved_table[letter]
+        return ans
+    
+    ## create a DrawinSolution offspring
+    def offspring(self, table):
+        return DarwinSolution(enc=self.enc, enc_freq1=self.enc_freq1, enc_freq2=self.enc_freq2, eng_freq1=self.eng_freq1, eng_freq2=self.eng_freq2, eng=self.eng, table=table)
+
+# LamarckSolution class represents a solution using traditional Darwinian evolution
+class LamarckSolution(Solution):
+    def __init__(self, table : dict(), enc : dict(), enc_freq1 : dict(), enc_freq2 : dict(), eng : dict(), eng_freq1 : dict(), eng_freq2 : dict(), n=2):
+        super().__init__(table, enc, enc_freq1, enc_freq2, eng, eng_freq1, eng_freq2)
+        self.__n = n
+        self.__did_improve = False
+
+    ## try to improve the solution
+    def __improve(self, counter, n):
+        self.__did_improve = True
+        alphabet = string.ascii_lowercase
+        n = min(n, int(len(alphabet) / 2))
+        letters = random.sample(alphabet, n + n)
+        opt_table = self._table.copy()
+        for i in range(0, n):
+            index = i + i
+            k1 = letters[index]
+            k2 = letters[index + 1]
+            val1 = opt_table[k1]
+            val2 = opt_table[k2]
+            opt_table[k1] = val2
+            opt_table[k2] = val1
+            s = Solution(enc=self.enc, enc_freq1=self.enc_freq1, enc_freq2=self.enc_freq2, eng_freq1=self.eng_freq1, eng_freq2=self.eng_freq2, eng=self.eng, table=opt_table)
+            score = s.get_fit(counter)
+            if score > self.get_fit(counter):
+                self._fit = score
+                self._table = opt_table
+        
+    ## make LamarckSolution offspring
+    def offspring(self, table):
+        return LamarckSolution(enc=self.enc, enc_freq1=self.enc_freq1, enc_freq2=self.enc_freq2, eng_freq1=self.eng_freq1, eng_freq2=self.eng_freq2, eng=self.eng, table=table)
+
+    def get_fit(self, counter):
+        if not self.__did_improve:
+            self.__improve(counter=counter, n=self.__n)
+        return super().get_fit(counter)   
+
             
 ## chack if it is a character we need to ignore
 def can_ignore(c):
@@ -141,7 +249,7 @@ def get_pairs_freq(enc):
     
     return freq
 
-
+## convert text to dictionary
 def to_dict(text : str):
     ans = dict()
     alphabet = string.ascii_lowercase
@@ -149,7 +257,7 @@ def to_dict(text : str):
         ans[alphabet[i]] = text[i]        
     return ans
 
-
+## select which solution to take to the crossover part
 def select_next(options : list, counter):
     best = None
     score = float('-inf')
@@ -160,7 +268,7 @@ def select_next(options : list, counter):
             best = s
     return best
 
-
+## split solutions to pairs
 def pair_solutions(solutions):
     ans = []
     random.shuffle(solutions)
@@ -175,45 +283,51 @@ def pair_solutions(solutions):
 
 
 ## random crossover
-def crossover(solutions, enc, enc_freq1, enc_freq2, eng, eng_freq1, eng_freq2):
+def crossover(solutions, c):
     alphabet = list(string.ascii_lowercase)
+    ## odds for a parent to stay for the next generation
     stay_odds = 0.35
+    ## odds for a mutation
     mu_odds = 0.01
     next_gen = []
     for p in solutions:
         children = random.randint(1, 2)
         sol1 = p[0]
+        converter1 = sol1.get_table()
         sol2 = p[1]
-        for i in range(0, children):
+        converter2 = sol2.get_table()
+        for _ in range(0, children):
 
             random.shuffle(alphabet)
             random_division = random.randint(1, 25)
             letters1 = alphabet[:random_division]
             letters2 = alphabet[random_division:]
+            
 
             table1 = dict()
             for let in letters1:
-                table1[let] = sol1.convert(let)
+                table1[let] = converter1[let]
             for let in letters2:
-                table1[let] = sol2.convert(let)
-            off1 = Solution(table=table1, enc=enc, eng=eng, enc_freq1=enc_freq1, enc_freq2=enc_freq2, eng_freq1=eng_freq1, eng_freq2=eng_freq2)
-          
+                table1[let] = converter2[let]
+            
+            off1 = sol1.offspring(table=table1)
             next_gen.append(off1)
+
             if random.random() <= mu_odds:
-                
-                next_gen.append(Solution(table=off1.mutation(), enc=enc, eng=eng, enc_freq1=enc_freq1, enc_freq2=enc_freq2, eng_freq1=eng_freq1, eng_freq2=eng_freq2))
+                ## mutation
+                next_gen.append(sol1.offspring(table=off1.mutation()))
+
             if (random_division != len(alphabet) / 2):
                 table2 = dict()
                 for let in letters1:
-                    table2[let] = sol2.convert(let)
+                    table2[let] = converter2[let]
                 for let in letters2:
-                    table2[let] = sol1.convert(let)
-                off2 = Solution(table=table2, enc=enc, eng=eng, enc_freq1=enc_freq1, enc_freq2=enc_freq2, eng_freq1=eng_freq1, eng_freq2=eng_freq2)
-                
+                    table2[let] = converter1[let]
+                off2 = sol2.offspring(table=table2)
                 next_gen.append(off2)
                 if random.random() <= mu_odds:
-                    
-                    next_gen.append(Solution(table=off2.mutation(), enc=enc, eng=eng, enc_freq1=enc_freq1, enc_freq2=enc_freq2, eng_freq1=eng_freq1, eng_freq2=eng_freq2))
+                    ## mutation
+                    next_gen.append(sol2.offspring(table=off2.mutation()))
 
         if random.random() <= stay_odds:
             next_gen.append(sol1)
@@ -222,23 +336,32 @@ def crossover(solutions, enc, enc_freq1, enc_freq2, eng, eng_freq1, eng_freq2):
 
     return next_gen
 
-
-def genetic(enc, enc_freq1, enc_freq2, english, eng_freq1, eng_freq2, num_permutations=2000, max_gen=800, max_con=15):
+## generate initial population
+def gen_population(enc, enc_freq1, enc_freq2, english, eng_freq1, eng_freq2, sol_type=0, population_size=20000):
     alphabet = string.ascii_lowercase
+    limited_permutations = set() 
+
+    # Generate limited permutations
+    while len(limited_permutations) < population_size:
+        permutation = random.sample(alphabet, len(alphabet))
+        limited_permutations.add(''.join(permutation))
+    if sol_type == 0:
+        ## regular
+        return [Solution(table=to_dict(x), enc=enc, eng=english, enc_freq1=enc_freq1, enc_freq2=enc_freq2, eng_freq1=eng_freq1, eng_freq2=eng_freq2) for x in limited_permutations]
+    if sol_type == 1:
+        ## darwin
+        return [DarwinSolution(table=to_dict(x), enc=enc, eng=english, enc_freq1=enc_freq1, enc_freq2=enc_freq2, eng_freq1=eng_freq1, eng_freq2=eng_freq2) for x in limited_permutations]
+    return [LamarckSolution(table=to_dict(x), enc=enc, eng=english, enc_freq1=enc_freq1, enc_freq2=enc_freq2, eng_freq1=eng_freq1, eng_freq2=eng_freq2) for x in limited_permutations]
+   
+## main genetic algorithm   
+def genetic(solutions, max_gen=800, max_con=15):
+    
     c = Counter()
     gen = 0
     con = 0
     best_score = float('-inf')
     best_sol = None
 
-    limited_permutations = set() 
-
-    # Generate limited permutations
-    while len(limited_permutations) < num_permutations:
-        permutation = random.sample(alphabet, len(alphabet))
-        limited_permutations.add(''.join(permutation))
-
-    solutions = [Solution(table=to_dict(x), enc=enc, eng=english, enc_freq1=enc_freq1, enc_freq2=enc_freq2, eng_freq1=eng_freq1, eng_freq2=eng_freq2) for x in limited_permutations]
     slice_size = 0
 
     while gen < max_gen and con < max_con and len(solutions) > slice_size:
@@ -246,12 +369,18 @@ def genetic(enc, enc_freq1, enc_freq2, english, eng_freq1, eng_freq2, num_permut
             slice_size = 3
         else:
             slice_size = 2
-
+        ## mix
         random.shuffle(solutions)
+        ## keep for next generation
         end = int(0.15 * len(solutions))
         elite = solutions[:end]
         solutions = solutions[end:]
+        ## split to slices and choose who continues on
         solutions = [select_next(sub_solution, c) for sub_solution in [solutions[i:i+slice_size] for i in range(0, len(solutions), slice_size)]]
+
+
+
+        ## make pairs
         if len(solutions) % 2 != 0 and len(solutions) > 1:
             random.shuffle(solutions)
             s1 = solutions.pop()
@@ -260,11 +389,13 @@ def genetic(enc, enc_freq1, enc_freq2, english, eng_freq1, eng_freq2, num_permut
         
         pairs = pair_solutions(solutions)
         
-        next_gen = crossover(solutions=pairs, enc=enc, eng=english, enc_freq1=enc_freq1, enc_freq2=enc_freq2, eng_freq1=eng_freq1, eng_freq2=eng_freq2)
+        ## crossover
+        next_gen = crossover(solutions=pairs, c=c)
         solutions = next_gen + elite
-        
+        ## find best
         next_sol = select_next(solutions, c)
-        
+
+        ## update best
         if next_sol is not None and next_sol.get_fit(c) > best_score:
             best_score = next_sol.get_fit(c)
             best_sol = next_sol
@@ -278,6 +409,7 @@ def genetic(enc, enc_freq1, enc_freq2, english, eng_freq1, eng_freq2, num_permut
     print("Fitness counter: " + str(c.get()))
     return best_sol
 
+## convert text to a set word words
 def convert_to_set(text):
     ans = set()
     for word in text:
@@ -287,7 +419,7 @@ def convert_to_set(text):
 
     return ans
 
-
+## convert frequencies file to a dictionary
 def convert_freq_file(lines):
     ans = dict()
     for line in lines:
@@ -298,6 +430,7 @@ def convert_freq_file(lines):
     return ans
 
 def main():
+    ## extrect data from files
     english = set(line.strip() for line in open('dict.txt'))
     english.remove("")
 
@@ -321,9 +454,13 @@ def main():
     letter2_freq_txt.close()
     freq2 = convert_freq_file(lf2)
 
+    ## generate population
+    pop = gen_population(sol_type=0, enc=enc_set, english=english, enc_freq1=freq_single, enc_freq2=freq_pair, eng_freq1=freq1, eng_freq2=freq2, population_size=20000)
 
-    ans = genetic(enc=enc_set, english=english, enc_freq1=freq_single, enc_freq2=freq_pair, eng_freq1=freq1, eng_freq2=freq2)
+    ## get best solution from genetic algorithm
+    ans = genetic(solutions=pop)
 
+    ## write answers to files
     with open("perm.txt", 'w') as file:
         file.write(ans.get_perm())
     
