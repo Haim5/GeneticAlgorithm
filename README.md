@@ -17,4 +17,4 @@ if not given, 20,000 is used as a default
 
 > python3 geneticAlgorithm.py 0 20000
 
-<em>**notice:** texamples 2 and 3 are identical </em>
+<em>**notice:** examples 2 and 3 are identical </em>
