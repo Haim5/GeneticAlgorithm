@@ -431,20 +431,14 @@ def convert_freq_file(lines):
     return ans
 
 def main(args):
-    if args is None or len(args) == 0:
-        print("Error: Missing Arguments.")
-        return
-
-    # 0 - regular, 1 - Darwin , 2 - Lamarck 
+    args_count = len(args)
     mode = 0
-    if args[0] == "1":
-        mode = 1
-    elif args[0] == "2":
-        mode = 2
-
     pop_size = 20000
-    if len(args) > 1:
-        pop_size = int(args[1])
+    if args_count > 0:
+        # 0 - regular, 1 - Darwin , 2 - Lamarck 
+        mode = int(args[0])
+        if args_count > 1:
+            pop_size = int(args[1])
 
     ## extrect data from files
     english = set(line.strip() for line in open('dict.txt'))
